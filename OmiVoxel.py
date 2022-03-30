@@ -25,10 +25,11 @@ acGrav = 9.0
 # paso de rayo, colision^2 para luz, distancia sol, ancho zonas,
 #   luz ambiente %, fuerza de luz 0-255, colision^2 para etc
 cnfgluz = [6, 100, 100000, 50, 0.3, 255, 36]
-# estructura de todos los voxels
+# estructura de todos los voxels, ren guarda el ultimo color renderizado
 pos = np.zeros((0, 3), dtype=float)
 col = np.zeros((0, 4), dtype=int)
 gru = np.zeros(0, dtype=int)
+ren = col.copy()
 # guardado para retroceder una vez
 memoria = []
 # guardado para velocidad entre simulaciones
@@ -890,7 +891,6 @@ def opciones():
 # funciones de ingreso de datos:
 
 def inputImg():
-    img = None
     ok = True
     try:
         txt = input(tab() + "nombre archivo png: ").replace(".png", "")
@@ -1007,6 +1007,7 @@ def inputAnima():
     txt = input(tab() + "animacion (s/N): ") == "s"
     ani = [txt]
     ok = True
+    # todo
     try:
         if txt:
             txt = min(32, max(1, int(input(tab() + "pasos (1 a 32): "))))
@@ -1046,6 +1047,10 @@ def inputFondos():
     escalarFondos()
 
 # funciones de herramientas internas:
+
+def renderZero():
+    global ren
+    ren = np.zeros((0, 4), dtype=int)
 
 def clavesInput(parametro):
     global mig
@@ -1122,7 +1127,7 @@ def guardaConfig():
     guardarTXT("config", False)
 
 def version():
-    return "(v0.1.0)"
+    return "(v0.2.0)"
 
 def escalarFondos():
     global fondos
@@ -1288,6 +1293,7 @@ def cronometro(opc="", show=True, forzado=False):
 
 def modificaLuz(ambi, porc):
     global cnfgluz
+    renderZero()
     cnfgluz[4] = np.clip(ambi, 0, 1)
     cnfgluz[5] = int(np.clip(porc * 255, 0, 255))
 
@@ -1336,10 +1342,11 @@ def retenerCambio():
     global pos
     global col
     global gru
+    global ren
     global giro
     global gvis
     global memoria
-    memoria.append([giro, pos.copy(), col.copy(), gru.copy(), gvis.copy()])
+    memoria.append([giro, pos.copy(), col.copy(), gru.copy(), gvis.copy(), ren.copy()])
     if len(memoria) > 6:
         memoria.pop(0)
 
@@ -1358,8 +1365,9 @@ def verificarGrupos():
             gvis = gvis[:(m + 1)]
         if mig >= gvis.size:
             mig = -1
+    renderZero()
 
-def pintar():
+def pintura():
     global acol
     return acol[np.random.randint(3)]
 
@@ -1409,10 +1417,10 @@ def grupoVacio():
 def vecGrupo(talla, grupo):
     return np.zeros(talla, dtype=int) + grupo
 
-def vecPintar(talla):
+def vecPintura(talla):
     c = np.zeros((0, 4), dtype=int)
     for i in range(talla):
-        c = np.append(c, [pintar()], axis=0)
+        c = np.append(c, [pintura()], axis=0)
     return c
 
 def mascara():
@@ -1426,13 +1434,14 @@ def mascara():
     res = np.where(gvis[gru], res, False)
     return res
 
-def animacion(ani, nombre):
+def animacionX(ani, nombre):
     global pos
     global col
     global gru
     global gvis
     global mig
     global escalaimg
+    # todo
     img = []
     # caida
     if ani[0]:
@@ -1615,13 +1624,10 @@ def rayoBasico(ini, fin, plim):
 
 def zonificar():
     global pos
-    global col
     global gru
     global gvis
     global cnfgluz
-    p = np.zeros((0, 3), dtype=float)
-    c = np.zeros((0, 4), dtype=int)
-    g = np.zeros(0, dtype=int)
+    g = gru.copy() * 0
     plim = np.append(np.min(pos, axis=0), np.max(pos, axis=0))
     plim = plim + np.array([-6, -6, -6, 6, 6, 6])
     zona = []
@@ -1634,34 +1640,16 @@ def zonificar():
     gvv = gvis[gru]
     for u in range(gru.size):
         if gvv[u]:
-            miz = enZona(pos[u, :], zona)
-            p = np.append(p, [pos[u, :]], axis=0)
-            c = np.append(c, [col[u, :]], axis=0)
-            g = np.append(g, miz)
-    return p, c, g, zona, plim
-
-def zonificarGeneral():
-    global pos
-    global gru
-    global cnfgluz
-    g = gru.copy()
-    plim = np.append(np.min(pos, axis=0), np.max(pos, axis=0))
-    plim = plim + np.array([-6, -6, -6, 6, 6, 6])
-    zona = []
-    pl = np.array(plim, dtype=int)
-    for x in range(pl[0], pl[3] + 1, cnfgluz[3]):
-        for y in range(pl[1], pl[4] + 1, cnfgluz[3]):
-            for z in range(pl[2], pl[5] + 1, cnfgluz[3]):
-                zona.append([x, y, z])
-    zona = np.array(zona)
-    for u in range(gru.size):
-        g[u] = enZona(pos[u, :], zona)
+            g[u] = enZona(pos[u, :], zona)
+        else:
+            g[u] = -1
     return g, zona, plim
 
 def enZona(des, zona):
     tot = np.sum(np.power(des - zona, 2.0), axis=1)
     # return np.random.randint(0, 10, 1)[0]
     # return 0
+    # todo
     return np.argmin(tot)
 
 def giroInt(npos, gra):
@@ -1690,6 +1678,7 @@ def retroceder():
     global pos
     global col
     global gru
+    global ren
     global giro
     global gvis
     global memoria
@@ -1700,6 +1689,7 @@ def retroceder():
         col = m[2]
         gru = m[3]
         gvis = m[4]
+        ren = m[5]
         verificarGrupos()
 
 def visibleGrupo(g):
@@ -1715,6 +1705,7 @@ def visibleGrupo(g):
 
 def exportarPNG(nombre, ang, ani, modo):
     global flags
+    # todo
     nombre = nombre.replace(".png", "").replace(".txt", "").replace(".gif", "")
     nombre = "img" if len(nombre) == 0 else nombre
     if modo == 4:
@@ -1979,23 +1970,31 @@ def sintaxis():
 
 def losEfectos():
     print("***Efectos***")
-    print("-   Transformacion:")
-    print("mover, rotar, escalar, demoler, limitar, oscila mover,")
-    print("oscila rotar, oscila escalar, respirar, inflar, balancear")
-    print("-   Destruccion:")
+    print(tab() + "Transformacion:")
+    print("mover, rotar, escalar, ini mover, ini rotar, balanceo,")
+    print("ini escalar, ini posicion, limitar, tierra, caer, visible,")
+    print("secuencia, pies, sim azar, sim velocidad, sim gravedad,")
+    print("sim colision, sim foco, sim enjambre, sim demoler,")
+    print("sim torcion, sim tornado, oscilar, inflar")
+    print(tab() + "Destruccion:")
     print("(todos llevan borra/b antes de...)")
-    print("bajotierra, colision, cruzados, esfera, cilindro, cubo,")
-    print("azar, cercano, limite")
-    print("-   Dibujado:")
-    print("visible, brocha esfera, brocha caja, brocha cilindro,")
-    print("brocha azar, gira luz, mueve luz, ")
+    print("bajotierra, colision, cruzados, esfera, cilindro, caja,")
+    print("azar, cercano, limite, luz, taladro")
+    print(tab() + "Creacion:")
+    print("(todos llevan crear/c antes de..., luego solido...)")
+    print("azar esfera, azar cilindro, anomalias")
+    print(tab() + "Dibujado:")
+    print("posicion luz, efecto color, rotar luz, brocha caja,")
+    print("brocha esfera, brocha cilindro, brocha azar, filtro,")
+    print("pintar textura, p textura, escalar alfa, pintar luz")
 
 def laAyuda():
     print("***Comandos***")
     print(tab() + "Administracion:")
     print("salir, atras, z, grupo, ver, nuevo, visible, exportar,")
     print("info, guardar, abrir, acercade, ayuda, salvar, s, sintaxis,")
-    print("modelo, cargar, guardar pieza, banderas, escalapng")
+    print("modelo, cargar, guardar pieza, banderas, escalapng, render,")
+    print("autodraw, renderluz, fondos, picada, verfondos, dibuplanos")
     print(tab() + "Animacion:")
     print("efectos, crear anima, ver anima, borra anima")
     print(tab() + "Transformacion:")
@@ -2003,7 +2002,7 @@ def laAyuda():
     print("mezclar, duplicar, mover, escalar, masa, estruir, limitar,")
     print("tierra, sim azar, sim velocidad, sim gravedad, sim colision,")
     print("sim foco, sim enjambre, sim demoler, sim torcion, sim tornado,")
-    print("invertir, anomalias, clon linea, clon aro")
+    print("invertir, clon linea, clon aro")
     print(tab() + "Destruccion:")
     print("(todos llevan borra/b antes de...)")
     print("bajotierra, grupo, colision, cruzados, esfera, cilindro,")
@@ -2013,16 +2012,14 @@ def laAyuda():
     print("punto, aro, cilindro, esfera, cono, demo, palo, silueta,")
     print("marco, cuadro, caja, piramide, circulo, rayo, arbol, rueda,")
     print("azar esfera, azar cilindro, relleno, mancha, poligono,")
-    print("paredes, revolucion, sombra, obra, techo, rampa, pelo,")
-    print("monigote, loco, maniqui")
+    print("paredes, sombra, obra, techo, rampa, pelo, maniqui, loco,")
+    print("monigote, anomalias")
     print(tab() + "Dibujado:")
-    print("color, crear textura, ver texturas, borra textura,")
-    print("textura, pintar, render, galeria, contorno, autodraw,")
-    print("renderluz, tipoluz, brocha esfera, brocha caja, fondos,")
-    print("brocha cilindro, brocha azar, fuerza luz, picada,")
-    print("posicion luz, luz defecto, dibuplanos, verfondos,")
-    print("filtro, poner alfa, escalar alfa, pintar luz, color azar,")
-    print("efecto color, pintar textura, p textura, pintar sombra")
+    print("color, crear textura, ver texturas, borra textura, color azar,")
+    print("textura, pintar, galeria, contorno, posicion luz, efecto color,")
+    print("tipoluz, brocha esfera, brocha caja, luz defecto, pintar textura,")
+    print("brocha cilindro, brocha azar, fuerza luz, pintar sombra, p textura,")
+    print("filtro, poner alfa, escalar alfa, pintar luz, rotar luz")
 
 # funciones de transformacion:
 
@@ -2030,6 +2027,7 @@ def luzDefecto():
     global mat
     global luz
     global giro
+    renderZero()
     luz = np.array([-mat[0] / 4, mat[0] / 4, mat[1] - mat[0]], dtype=float)
     giraLuz(giro)
 
@@ -2038,7 +2036,7 @@ def giraTodo(gra):
     global giro
     if gra != 0:
         pos = giroInt(pos, gra)
-        giraLuz(gra)
+        giraLuz(gra, False)
         giro += gra
         if giro >= 360:
             giro -= 360
@@ -2051,9 +2049,11 @@ def giraCentro():
     giraTodo(-agiro)
     return agiro
 
-def giraLuz(gra):
+def giraLuz(gra, sola=True):
     global luz
     if gra != 0:
+        if sola:
+            renderZero()
         dis = magnitud(luz[:2])
         if dis != 0:
             ang = np.arccos(luz[0] / dis)
@@ -2062,13 +2062,22 @@ def giraLuz(gra):
             luz[0] = dis * np.cos(ang)
             luz[1] = dis * np.sin(ang)
 
-def trasladaLuz(des):
+def trasladaLuz(des, relativo=False):
     global luz
     global flags
     global giro
-    luz = des
-    if flags[2]:
-        giraLuz(giro)
+    renderZero()
+    if relativo:
+        if flags[2]:
+            giraLuz(-giro)
+            luz = luz + des
+            giraLuz(giro)
+        else:
+            luz = luz + des
+    else:
+        luz = des
+        if flags[2]:
+            giraLuz(giro)
 
 def eliminarBajotierra():
     global pos
@@ -2143,6 +2152,7 @@ def posicion(des, newpos):
         agiro = giraCentro() if flags[2] else 0
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + (newpos - des), pos)
         giraTodo(agiro)
+        renderZero()
 
 def traslacion(des):
     global pos
@@ -2152,6 +2162,7 @@ def traslacion(des):
         agiro = giraCentro() if flags[2] else 0
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + des, pos)
         giraTodo(agiro)
+        renderZero()
 
 def escalamiento(des, mul):
     global pos
@@ -2162,6 +2173,7 @@ def escalamiento(des, mul):
         pos = np.where(np.reshape(mascara(), (-1, 1)),
                        ((pos - des) * mul) + des, pos)
         giraTodo(agiro)
+        renderZero()
 
 def masaCentro(show):
     global pos
@@ -2247,6 +2259,7 @@ def rotacion(des, gra):
             pos[:, 1] = np.where(ggg, dis * np.sin(ang), pos[:, 1])
         pos = np.where(np.reshape(ggg, (-1, 1)), pos + des, pos)
         giraTodo(agiro)
+        renderZero()
 
 def espejo(ejex, ejey):
     global pos
@@ -2548,6 +2561,7 @@ def limitar(soloSuelo=False):
             pos = np.where(np.reshape(mascara(), (-1, 1)),
                            pos.clip(minf, msup), pos)
             giraTodo(agiro)
+            renderZero()
 
 def eliminarLuz():
     global luz
@@ -2560,7 +2574,7 @@ def eliminarLuz():
     if gru.size > 0:
         agiro = giraCentro() if flags[2] else 0
         ggg = mascara()
-        agru, zona, plim = zonificarGeneral()
+        agru, zona, plim = zonificar()
         colis = np.zeros(agru.size, dtype=int) == 1
         bias = ggg.copy()
         if flags[3]:
@@ -2613,6 +2627,7 @@ def particulasAzar():
         des = np.random.random_sample((gru.size, 3)) * 2.0 - 1.0
         des = des / np.reshape(np.sqrt(np.sum(np.power(des, 2.0), axis=1)), (-1, 1))
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + des * 12.0, pos)
+        renderZero()
 
 def particulasVelcidad(restart=False):
     global pos
@@ -2632,6 +2647,7 @@ def particulasVelcidad(restart=False):
             vel.append(np.zeros((0, 3), dtype=float))
         vel[mig + 1] = des
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + des * 12.0, pos)
+        renderZero()
 
 def particulasGravedad():
     global pos
@@ -2640,6 +2656,7 @@ def particulasGravedad():
     if gru.size > 0:
         grav = np.array([0, 0, -acGrav], dtype=float)
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + grav, pos)
+        renderZero()
 
 def particulasDireccionadas(foc, atrae):
     global pos
@@ -2653,6 +2670,7 @@ def particulasDireccionadas(foc, atrae):
         des = des / np.reshape(np.sqrt(np.sum(np.power(des, 2.0), axis=1)), (-1, 1))
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + des * 12.0, pos)
         giraTodo(agiro)
+        renderZero()
 
 def particulasColision(g):
     global gru
@@ -2690,7 +2708,10 @@ def particulasColision(g):
         bou = np.where(np.reshape(dis < 4.5, (-1, 1)), bou,
                        (bou / np.reshape(dis, (-1, 1))) * 4.5)
         pos = pos + bou
-        return False in np.reshape(bou == 0, (1, -1))
+        res = False in np.reshape(bou == 0, (1, -1))
+        if res:
+            renderZero()
+        return res
 
 def particulasLibres(g, limite, manual):
     global flags
@@ -2739,6 +2760,7 @@ def particulasTorcion(eje, azar):
                                    (-1, 1))
         pos = np.where(np.reshape(mascara(), (-1, 1)), pos + rot * 12.0, pos)
         giraTodo(agiro)
+        renderZero()
 
 def particulasTornado(g, limite):
     particulasTorcion(np.array([0, 0, 1]), True)
@@ -2763,7 +2785,7 @@ def crearAnomalias(porc):
                     des = des / magnitud(des)
                     p = np.append(p, [pos[u, :] + des * 6.0], axis=0)
                     break
-        c = vecPintar(p.shape[0])
+        c = vecPintura(p.shape[0])
         g = vecGrupo(p.shape[0], grupoVacio())
         agregar(p, c, g)
 
@@ -2789,16 +2811,17 @@ def crearPunto(des):
     global mig
     if mig == -1:
         mig = grupoVacio()
-    agregar(np.array([des]), [pintar()], mig)
+    agregar(np.array([des]), [pintura()], mig)
 
 def crearRelleno(des, g, ori, rec=0, fir=True):
     global mig
     global gru
+    agiro = 0
     if fir:
         if mig == -1:
             mig = grupoVacio()
         agiro = giraCentro() if flags[2] else 0
-    agregar(np.array([des]), [pintar()], mig)
+    agregar(np.array([des]), [pintura()], mig)
     if rec < 980:
         otrop = [des + np.array([0, 6, 0]), des + np.array([6, 0, 0]),
                  des + np.array([0, -6, 0]), des + np.array([-6, 0, 0])]
@@ -2828,7 +2851,7 @@ def crearMancha(des, g, ori, rec=0, fir=True):
         if mig == -1:
             mig = grupoVacio()
         agiro = giraCentro() if flags[2] else 0
-    agregar(np.array([des]), [pintar()], mig)
+    agregar(np.array([des]), [pintura()], mig)
     if rec < 980:
         otrop = [des + np.array([0, 6, 0]), des + np.array([6, 0, 0]),
                  des + np.array([0, -6, 0]), des + np.array([-6, 0, 0])]
@@ -2878,7 +2901,7 @@ def crearAro(des, rad, eje):
                 rr = np.deg2rad(r)
                 n = np.array([des + np.array([rad * np.cos(rr), rad * np.sin(rr), 0])])
                 p = np.append(p, n, axis=0)
-        c = vecPintar(p.shape[0])
+        c = vecPintura(p.shape[0])
         g = vecGrupo(p.shape[0], mig)
         agregar(p, c, g)
 
@@ -2986,6 +3009,12 @@ def crearSilueta():
         g = vecGrupo(p.shape[0], grupoVacio())
         agregar(p, c, g)
         giraTodo(agiro)
+        if g.size > 0:
+            return g[0]
+        else:
+            return -1
+    else:
+        return -1
 
 def crearSombra():
     global gru
@@ -2998,7 +3027,7 @@ def crearSombra():
         agiro = giraCentro() if flags[2] else 0
         p = np.zeros((0, 3), dtype=float)
         c = np.zeros((0, 4), dtype=int)
-        agru, zona, plim = zonificarGeneral()
+        agru, zona, plim = zonificar()
         bias = mascara()
         if flags[3]:
             lux = luz
@@ -3017,6 +3046,12 @@ def crearSombra():
         g = vecGrupo(p.shape[0], grupoVacio())
         agregar(p, c, g)
         giraTodo(agiro)
+        if g.size > 0:
+            return g[0]
+        else:
+            return -1
+    else:
+        return -1
 
 def crearMarco(des, talla, eje):
     global mig
@@ -3075,7 +3110,7 @@ def crearMarco(des, talla, eje):
                 p = np.append(p, n, axis=0)
                 n = [des + np.array([talla[0], y, 0])]
                 p = np.append(p, n, axis=0)
-        c = vecPintar(p.shape[0])
+        c = vecPintura(p.shape[0])
         g = vecGrupo(p.shape[0], mig)
         agregar(p, c, g)
 
@@ -3118,7 +3153,7 @@ def crearCuadro(des, talla, eje):
                 for y in np.arange(py, talla[1] + 1 - py, max(0.001, py)):
                     n = [des + np.array([x, y, 0])]
                     p = np.append(p, n, axis=0)
-        c = vecPintar(p.shape[0])
+        c = vecPintura(p.shape[0])
         g = vecGrupo(p.shape[0], mig)
         agregar(p, c, g)
 
@@ -3232,7 +3267,7 @@ def crearAzarCilindro(des, rad, alt, eje, porc):
                 if d <= dmin:
                     p = np.append(p, [new + des], axis=0)
                     break
-    c = vecPintar(p.shape[0])
+    c = vecPintura(p.shape[0])
     g = vecGrupo(p.shape[0], mig)
     agregar(p, c, g)
 
@@ -3250,7 +3285,7 @@ def crearAzarEsfera(des, rad, porc):
             if d <= dmin:
                 p = np.append(p, [new + des], axis=0)
                 break
-    c = vecPintar(p.shape[0])
+    c = vecPintura(p.shape[0])
     g = vecGrupo(p.shape[0], mig)
     agregar(p, c, g)
 
@@ -3649,8 +3684,8 @@ def pintarClasico(nombre):
     aecol = ecol.copy()
     galeriaTexturas()
     elegirTextura(nombre, False)
-    pintarGrupo()
     ecol = aecol
+    pintarGrupo()
     acol = aacol
 
 def colorAzar(payaso):
@@ -3727,12 +3762,17 @@ def eliminarTextura(nombre):
 def elegirTextura(nombre, show=True):
     global ecol
     global acol
-    for t in ecol:
-        if t[0] == nombre:
-            acol = t[1].copy()
-            if show:
-                print(tab() + "Ok")
-            break
+    if nombre == "$":
+        colorAzar(False)
+    elif nombre == "$$$":
+        colorAzar(True)
+    else:
+        for t in ecol:
+            if t[0] == nombre:
+                acol = t[1].copy()
+                if show:
+                    print(tab() + "Ok")
+                break
 
 def pintarGrupo():
     global col
@@ -3740,7 +3780,8 @@ def pintarGrupo():
     ggg = mascara()
     for u in range(gru.size):
         if ggg[u]:
-            col[u, :] = pintar()
+            col[u, :] = pintura()
+    renderZero()
 
 def pintarTransparencia(alp, setear):
     global col
@@ -3754,6 +3795,7 @@ def pintarTransparencia(alp, setear):
         for u in range(gru.size):
             if ggg[u]:
                 col[u, 3] = int(np.clip(col[u, 3] * alp, 0, 255))
+    renderZero()
 
 def dibuContorno(s, c):
     global contorno
@@ -3782,16 +3824,19 @@ def dibujar(grupal=False, maraton=False):
     global flags
     global fondos
     global cuadricula
+    global col
+    global ren
     if gru.size > 0:
         if grupal:
             ss = dibujaGrupo()
         else:
             if flags[1]:
-                if maraton:
-                    cronometro("", False)
-                ss = dibujaLuz(maraton)
-                if maraton:
-                    cronometro("", True, True)
+                ancol = col.copy()
+                if ren.shape[0] != col.shape[0]:
+                    ren = dibujaLuz()
+                col = ren
+                ss = dibujaBasico()
+                col = ancol
             else:
                 ss = dibujaBasico()
     elif grupal:
@@ -3889,47 +3934,46 @@ def dibujaBasico():
             ss.blit(s, (apos[dd, 0], apos[dd, 1]))
     return ss
 
-def dibujaLuz(maraton=False):
+def dibujaLuz():
+    global pos
+    global col
     global cam
     global cen
     global mat
     global luz
     global flags
     global cnfgluz
-    if not maraton:
-        cronometro("", False)
-    apos, aacol, agru, zona, plim = zonificar()
-    if not maraton:
-        cronometro("zonificar")
+    cronometro("", False)
+    agru, zona, plim = zonificar()
+    cronometro("zonificar")
     # calcular iluminacion
     milu = np.zeros(agru.size, dtype=float)
-    bias = np.zeros(agru.size, dtype=int) == 0
+    bias = np.where(agru == -1, False, True)
     if flags[3]:
         lux = luz
         extra = 0
     else:
         lux = (luz / magnitud(luz)) * cnfgluz[2]
         extra = cnfgluz[2] - magnitud(np.array([mat[0], mat[0], mat[1]]))
-    dep = np.argsort(np.sum(np.power(apos - lux, 2.0), axis=1))
+    dep = np.argsort(np.sum(np.power(pos - lux, 2.0), axis=1))
     for d in range(dep.size - 1, -1, -1):
         dd = dep[d]
         if bias[dd]:
             bias[dd] = False
-            bla, llego = rayoLuz(lux, pos[dd, :], apos, aacol, agru,
+            bla, llego = rayoLuz(lux, pos[dd, :], pos, col, agru,
                                        zona, extra, bias, plim)
             for b in bla:
                 milu[b[0]] = min(255, b[1] + milu[b[0]])
             milu[dd] = min(255, llego + milu[dd])
-    if not maraton:
-        cronometro("iluminacion")
+    cronometro("iluminacion")
     # difuminar las sombras
-    bias = np.zeros(agru.size, dtype=int) == 0
+    bias = np.where(agru == -1, False, True)
     for u in range(bias.size):
         bias[u] = False
         bb = []
         for v in range(bias.size):
             if bias[v] and agru[u] == agru[v]:
-                d = np.power(apos[u, :] - apos[v, :], 2.0).sum()
+                d = np.power(pos[u, :] - pos[v, :], 2.0).sum()
                 if d <= cnfgluz[1]:
                     bb.append(v)
         slu = milu[u]
@@ -3940,27 +3984,12 @@ def dibujaLuz(maraton=False):
         for v in bb:
             milu[v] = slu
     milu = milu * ((1 - cnfgluz[4]) / 255) + cnfgluz[4]
-    if not maraton:
-        cronometro("difuminacion")
-    # dibujar los voxels
-    ss = pg.Surface(mat, pg.SRCALPHA, 32)
-    ss.fill((0, 0, 0, 0))
-    s = pg.Surface((12, 12), pg.SRCALPHA, 32)
-    dep = np.argsort(np.sum(np.power(apos - cam, 2.0), axis=1))
-    if flags[4]:
-        apos[:, 1] = np.subtract(apos[:, 1], apos[:, 2] * 0.5)
-    else:
-        apos[:, 1] = np.subtract(apos[:, 1], apos[:, 2])
-    apos = apos[:, :2] + (cen - 6)
-    for d in range(len(dep) - 1, -1, -1):
-        dd = dep[d]
-        s.fill((0, 0, 0, 0))
-        c = aacol[dd, :] * np.array([milu[dd], milu[dd], milu[dd], 1], dtype=float)
-        c = np.array(np.clip(c, 0, 255), dtype=int)
-        pg.draw.circle(s, c, (6, 6), 5)
-        dibuContorno(s, c)
-        ss.blit(s, (apos[dd, 0], apos[dd, 1]))
-    return ss
+    cronometro("difuminacion")
+    # entregar los colores modificados
+    colren = col.copy()
+    colren[:, :3] = colren[:, :3] * milu.reshape((-1, 1))
+    colren = np.array(np.clip(colren, 0, 255), dtype=int)
+    return colren
 
 def dibujaGrupo():
     global pos
@@ -4215,8 +4244,9 @@ def brochaEsfera(des, rad, inv):
             if ggg[u]:
                 d = np.power(pos[u, :] - des, 2.0).sum()
                 if (d <= dmin) != inv:
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
         giraTodo(agiro)
+        renderZero()
 
 def brochaCaja(des1, des2, inv):
     global gru
@@ -4230,8 +4260,9 @@ def brochaCaja(des1, des2, inv):
             if ggg[u]:
                 if not (False in (pos[u, :] >= des1) or
                         False in (pos[u, :] <= des1 + des2)) != inv:
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
         giraTodo(agiro)
+        renderZero()
 
 def brochaCilindro(des, rad, alt, eje, inv):
     global gru
@@ -4259,7 +4290,7 @@ def brochaCilindro(des, rad, alt, eje, inv):
                             if (d <= dmin) != inv:
                                 bor = True
                     if bor:
-                        col[u, :] = pintar()
+                        col[u, :] = pintura()
         elif eje == 1:
             for u in range(gru.size - 1, -1, -1):
                 if ggg[u]:
@@ -4277,7 +4308,7 @@ def brochaCilindro(des, rad, alt, eje, inv):
                             if d <= dmin:
                                 bor = True
                     if bor:
-                        col[u, :] = pintar()
+                        col[u, :] = pintura()
         else:
             for u in range(gru.size - 1, -1, -1):
                 if ggg[u]:
@@ -4295,8 +4326,9 @@ def brochaCilindro(des, rad, alt, eje, inv):
                             if d <= dmin:
                                 bor = True
                     if bor:
-                        col[u, :] = pintar()
+                        col[u, :] = pintura()
         giraTodo(agiro)
+        renderZero()
 
 def brochaAzar(porc):
     global gru
@@ -4311,16 +4343,18 @@ def brochaAzar(porc):
             while True:
                 u = np.random.randint(0, gru.size, 1)[0]
                 if ggg[u] and bias[u]:
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
                     bias[u] = False
                     break
         verificarGrupos()
+        renderZero()
 
 def filtroColor():
     global gru
     global pos
     global col
     global cnfgluz
+    renderZero()
     bias = np.zeros(gru.size, dtype=int) == 0
     ggg = mascara()
     for u in range(bias.size):
@@ -4351,7 +4385,7 @@ def pintarLuz():
     if gru.size > 0:
         agiro = giraCentro() if flags[2] else 0
         ggg = mascara()
-        agru, zona, plim = zonificarGeneral()
+        agru, zona, plim = zonificar()
         colis = np.zeros(agru.size, dtype=int) == 1
         bias = ggg.copy()
         if flags[3]:
@@ -4371,13 +4405,15 @@ def pintarLuz():
                     colis[impac] = True
         for u in range(gru.size - 1, -1, -1):
             if colis[u]:
-                col[u, :] = pintar()
+                col[u, :] = pintura()
         giraTodo(agiro)
+        renderZero()
 
 def efectoColor(tipo):
     global col
     global gru
     global acol
+    renderZero()
     ggg = mascara()
     # escala de grises
     if tipo == 0:
@@ -4402,7 +4438,7 @@ def efectoColor(tipo):
     elif tipo == 3:
         for u in range(gru.size):
             if ggg[u]:
-                col[u, :3] = np.array((col[u, :3] + pintar()[:3]) / 2, dtype=int)
+                col[u, :3] = np.array((col[u, :3] + pintura()[:3]) / 2, dtype=int)
     # variar color al azar
     elif tipo == 4:
         for u in range(gru.size):
@@ -4432,42 +4468,18 @@ def efectoColor(tipo):
             if ggg[u]:
                 if (np.sum(vie[0] >= col[u, :] - sens) == 4 and
                         np.sum(vie[0] <= col[u, :] + sens) == 4):
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
                 elif (np.sum(vie[1] >= col[u, :] - sens) == 4 and
                       np.sum(vie[1] <= col[u, :] + sens) == 4):
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
                 elif (np.sum(vie[2] >= col[u, :] - sens) == 4 and
                       np.sum(vie[2] <= col[u, :] + sens) == 4):
-                    col[u, :] = pintar()
+                    col[u, :] = pintura()
 
 def pintarSombra():
     global col
-    global acol
-    global gru
-    global cnfgluz
-    aacol = acol.copy()
-    ancol = col.copy()
-    bla = np.array([255, 255, 255, 255], dtype=int)
-    nuevoColor(np.array([0, 0, 0, 255], dtype=int), bla, bla)
-    pintarGrupo()
-    nuevoColor(bla, bla, bla)
-    cronometro("", False)
-    pintarLuz()
-    cronometro("iluminacion")
-    filtroColor()
-    cronometro("difuminacion")
-    acol = aacol
-    ggg = mascara()
-    fu = cnfgluz[5] / 255
-    milu = col[:, 0] * fu * ((1 - cnfgluz[4]) / 255) + cnfgluz[4]
-    for u in range(gru.size):
-        if ggg[u]:
-            c = ancol[u, :3] * np.array([milu[u], milu[u], milu[u]],
-                                        dtype=float)
-            col[u, :3] = np.array(np.clip(c, 0, 255), dtype=int)
-            col[u, 3] = ancol[u, 3]
-        else:
-            col[u, :] = ancol[u, :]
+    col = dibujaLuz()
+    renderZero()
 
 # funciones de animacion
 
@@ -4512,32 +4524,345 @@ def elegirAnimacion(nombre):
             break
     return ani, ok
 
+def animacion(ani, hacersombras=0):
+    global pos
+    global col
+    global gru
+    global gvis
+    global mig
+    global acol
+    pose = []
+    if len(ani) > 1:
+        retenerCambio()
+        amig = mig
+        aacol = None
+        ancol = None
+        apos = None
+        agru = None
+        agvis = None
+        sub = max(1, ani[0])
+        # condiciones iniciales
+        for mov in ani[1:]:
+            if mov[0] == "ini mover":
+                mig = mov[1]
+                traslacion(mov[2])
+            elif mov[0] == "ini posicion":
+                mig = mov[1]
+                posicion(mov[2], mov[3])
+            elif mov[0] == "ini rotar":
+                mig = mov[1]
+                rotacion(mov[2], mov[3])
+            elif mov[0] == "ini escalar":
+                mig = mov[1]
+                escalamiento(mov[2], mov[3])
+            elif mov[0] == "pies":
+                mig = mov[1]
+                des, base, mas = masaCentro(False)
+                des[2] = base
+                posicion(des, mov[3])
+                if mov[5]:
+                    for a in range(int(sub / 2)):
+                        aniPies(mov, sub)
+        # ciclo de pasos
+        for a in range(sub):
+            # ver si se crean sombras o no
+            if hacersombras != 0:
+                ancol = col.copy()
+                apos = pos.copy()
+                agru = gru.copy()
+                agvis = gvis.copy()
+            if hacersombras == 1 or hacersombras == 2:
+                mig = crearSilueta()
+            elif hacersombras == 3 or hacersombras == 4:
+                mig = crearSombra()
+            if hacersombras == 2 or hacersombras == 4:
+                for u in range(gru.size - 1, -1, -1):
+                    if gru[u] != mig:
+                        pos = np.delete(pos, u, axis=0)
+                        col = np.delete(col, u, axis=0)
+                        gru = np.delete(gru, u)
+                verificarGrupos()
+            # guardar la pose
+            pack = [pos.copy(), col.copy(), gru.copy(), gvis.copy()]
+            pose.append(pack)
+            print(tab() + "..." + str(a))
+            if a == sub - 1:
+                break
+            # quitar sombras
+            if hacersombras != 0:
+                col = ancol
+                pos = apos
+                gru = agru
+                gvis = agvis
+            # efectos modificantes
+            for mov in ani[1:]:
+                if mov[0] == "mover":
+                    mig = mov[1]
+                    traslacion(mov[2])
+                elif mov[0] == "rotar":
+                    mig = mov[1]
+                    rotacion(mov[2], mov[3])
+                elif mov[0] == "escalar":
+                    mig = mov[1]
+                    escalamiento(mov[2], mov[3])
+                elif mov[0] == "oscilar":
+                    # todo
+                    pass
+                elif mov[0] == "balanceo":
+                    # todo
+                    pass
+                elif mov[0] == "inflar":
+                    # todo
+                    pass
+                elif mov[0] == "limitar":
+                    mig = mov[1]
+                    limitar(False)
+                elif mov[0] == "tierra":
+                    mig = mov[1]
+                    limitar(True)
+                elif mov[0] == "caer":
+                    mig = mov[1]
+                    escalamiento(np.zeros(3), np.array([1, 1, (sub - 1 - a) / sub],
+                                                       dtype=float))
+                elif mov[0] == "crear anomalias" or mov[0] == "c anomalias":
+                    mig = mov[1]
+                    elegirTextura(mov[3], False)
+                    crearAnomalias(mov[2])
+                elif mov[0] == "visible":
+                    if mov[3]:
+                        gvis = np.zeros(gvis.size, dtype=int) == 1
+                    if a == mov[2]:
+                        visibleGrupo(mov[1])
+                elif mov[0] == "secuencia":
+                    gvis = np.zeros(gvis.size, dtype=int) == 1
+                    visibleGrupo(min(gvis.size - 1, a))
+                elif mov[0] == "pies":
+                    aniPies(mov, sub)
+                elif mov[0] == "sim azar":
+                    mig = mov[1]
+                    particulasAzar()
+                elif mov[0] == "sim velocidad":
+                    mig = mov[1]
+                    particulasVelcidad()
+                elif mov[0] == "sim gravedad":
+                    mig = mov[1]
+                    particulasGravedad()
+                elif mov[0] == "sim colision":
+                    mig = mov[1]
+                    particulasColision(mov[2])
+                elif mov[0] == "sim foco":
+                    mig = mov[1]
+                    particulasDireccionadas(mov[2], mov[3])
+                elif mov[0] == "sim enjambre":
+                    mig = mov[1]
+                    particulasEnjambre(mov[2], mov[3], mov[4], mov[5])
+                elif mov[0] == "sim demoler":
+                    mig = mov[1]
+                    particulasDemoler(mov[2], mov[3])
+                elif mov[0] == "sim torcion":
+                    mig = mov[1]
+                    particulasTorcion(mov[2], mov[3])
+                elif mov[0] == "sim tornado":
+                    mig = mov[1]
+                    particulasTornado(mov[2], mov[3])
+                elif mov[0] == "borra bajotierra" or mov[0] == "b bajotierra":
+                    mig = mov[1]
+                    eliminarBajotierra()
+                elif mov[0] == "borra colision" or mov[0] == "b colision":
+                    mig = mov[1]
+                    eliminarColision(mov[2])
+                elif mov[0] == "borra cruzados" or mov[0] == "b cruzados":
+                    mig = mov[1]
+                    eliminarColision(mig)
+                elif mov[0] == "borra esfera" or mov[0] == "b esfera":
+                    mig = mov[1]
+                    eliminarEsfera(mov[2], mov[3], mov[4])
+                elif mov[0] == "borra cilindro" or mov[0] == "b cilindro":
+                    mig = mov[1]
+                    eliminarCilindro(mov[2], mov[3], mov[4], mov[5], mov[6])
+                elif mov[0] == "borra caja" or mov[0] == "b caja":
+                    mig = mov[1]
+                    eliminarCaja(mov[2], mov[3], mov[4])
+                elif mov[0] == "borra azar" or mov[0] == "b azar":
+                    mig = mov[1]
+                    eliminarAzar(mov[2])
+                elif mov[0] == "borra cercano" or mov[0] == "b cercano":
+                    mig = mov[1]
+                    eliminarColision(mov[2], mov[3])
+                elif mov[0] == "borra limite" or mov[0] == "b limite":
+                    mig = mov[1]
+                    eliminarLimites()
+                elif mov[0] == "borra luz" or mov[0] == "b luz":
+                    mig = mov[1]
+                    eliminarLuz()
+                elif mov[0] == "borra taladro" or mov[0] == "b taladro":
+                    mig = mov[1]
+                    eliminarRayo(mov[2], mov[3], mov[4], mov[5])
+                elif mov[0] == "crear azar esfera" or mov[0] == "c azar esfera":
+                    mig = mov[1]
+                    elegirTextura(mov[5], False)
+                    crearAzarEsfera(mov[2], mov[3], mov[4])
+                elif mov[0] == "crear azar cilindro" or mov[0] == "c azar cilindro":
+                    mig = mov[1]
+                    elegirTextura(mov[7], False)
+                    crearAzarCilindro(mov[2], mov[3], mov[4], mov[5], mov[6])
+                elif mov[0] == "posicion luz":
+                    trasladaLuz(mov[2], True)
+                elif mov[0] == "efecto color":
+                    mig = mov[1]
+                    elegirTextura(mov[3], False)
+                    efectoColor(mov[2])
+                elif mov[0] == "rotar luz":
+                    giraLuz(mov[2])
+                elif mov[0] == "brocha esfera":
+                    mig = mov[1]
+                    elegirTextura(mov[5], False)
+                    brochaEsfera(mov[2], mov[3], mov[4])
+                elif mov[0] == "brocha caja":
+                    mig = mov[1]
+                    elegirTextura(mov[5], False)
+                    brochaCaja(mov[2], mov[3], mov[4])
+                elif mov[0] == "brocha cilindro":
+                    mig = mov[1]
+                    elegirTextura(mov[7], False)
+                    brochaCilindro(mov[2], mov[3], mov[4], mov[5], mov[6])
+                elif mov[0] == "brocha azar":
+                    mig = mov[1]
+                    elegirTextura(mov[3], False)
+                    brochaAzar(mov[2])
+                elif mov[0] == "pintar textura" or mov[0] == "p textura":
+                    if a == mov[2]:
+                        mig = mov[1]
+                        pintarClasico(mov[3])
+                elif mov[0] == "filtro":
+                    mig = mov[1]
+                    filtroColor()
+                elif mov[0] == "escalar alfa":
+                    mig = mov[1]
+                    pintarTransparencia(mov[2], False)
+                elif mov[0] == "pintar luz":
+                    mig = mov[1]
+                    elegirTextura(mov[2], False)
+                    pintarLuz()
+        retroceder()
+        mig = amig
+        acol = aacol
+    else:
+        pack = [pos.copy(), col.copy(), gru.copy(), gvis.copy()]
+        pose.append(pack)
+    return pose
+
+def aniPies(mov, sub):
+    global mig
+    mig = mov[1]
+    des, base, mas = masaCentro(False)
+    des[2] = base
+    ades = des.copy()
+    ini = mov[3]
+    fin = mov[4]
+    if mov[2] == 0:
+        paso = (2 * (fin[1] + fin[2])) / sub
+        while paso > 0:
+            if des[2] == ini[2]:
+                des[1] = des[1] - paso
+                if des[1] < ini[1]:
+                    paso = ini[1] - des[1]
+                    des[1] = ini[1]
+                else:
+                    paso = 0
+            if des[1] == ini[1]:
+                des[2] = des[2] + paso
+                if des[2] > ini[2] + fin[2]:
+                    paso = des[2] - (ini[2] + fin[2])
+                    des[2] = ini[2] + fin[2]
+                else:
+                    paso = 0
+            if des[2] == ini[2] + fin[2]:
+                des[1] = des[1] + paso
+                if des[1] > ini[1] + fin[1]:
+                    paso = des[1] - (ini[1] + fin[1])
+                    des[1] = ini[1] + fin[1]
+                else:
+                    paso = 0
+            if des[1] == ini[1] + fin[1]:
+                des[2] = des[2] - paso
+                if des[2] < fin[2]:
+                    paso = fin[2] - des[2]
+                    des[2] = fin[2]
+                else:
+                    paso = 0
+    elif mov[2] == 1:
+        hip = magnitud(np.array([0, fin[1] / 2, fin[2]]))
+        paso = (fin[1] + 2 * hip) / sub
+        dd1 = np.array([0, fin[1] / 2, fin[2]]) / hip
+        dd2 = np.array([0, fin[1] / 2, -fin[2]]) / hip
+        while paso > 0:
+            if des[2] == ini[2]:
+                des[1] = des[1] - paso
+                if des[1] < ini[1]:
+                    paso = ini[1] - des[1]
+                    des[1] = ini[1]
+                    des[2] = des[2] + 0.001
+                else:
+                    paso = 0
+            elif des[1] < ini[1] + fin[1] / 2:
+                des = des + dd1 * paso
+                if des[2] > ini[2] + fin[2]:
+                    paso = magnitud(des - (ini + dd1 * hip))
+                    des = ini + dd1 + hip
+                    des[1] = des[1] + 0.001
+                else:
+                    paso = 0
+            else:
+                des = des + dd2 * paso
+                if des[2] < ini[2]:
+                    paso = magnitud(des - (ini + np.array([0, fin[1], 0])))
+                    des = ini + np.array([0, fin[1], 0])
+                else:
+                    paso = 0
+    elif mov[2] == 2:
+        rad = fin[2] / 2
+        dd = des - (ini + np.array([0, 0, rad]))
+        paso = (2 * np.pi) / sub
+        ang = np.arccos(dd[1] / magnitud(dd))
+        ang = ang if dd[2] > 0 else -ang
+        ang += paso
+        des = ini + np.array([0, 0, rad])
+        des[1] = rad * np.cos(ang)
+        des[2] = rad * np.sin(ang)
+    else:
+        paso = (2 * fin[2]) / sub
+        while paso > 0:
+            if mov[5]:
+                des[2] = des[2] - paso
+                if des[2] < ini[2]:
+                    paso = ini[2] - des[2]
+                    des[2] = ini[2]
+                    mov[5] = not mov[5]
+            else:
+                des[2] = des[2] + paso
+                if des[2] > ini[2] + fin[2]:
+                    paso = des[2] - (ini[2] + fin[2])
+                    des[2] = ini[2] + fin[2]
+                    mov[5] = not mov[5]
+    posicion(ades, des)
+
 main()
 
 """
 Tareas:
 config
-- exportar opcion solo sombras, no en animacion
-- guardar y abrir animaciones del txt
 - verificar tipos de renderizado, zonas, azar, completo
 - ver color actual y de mouse en GUI
 ani
-- poder ejecutar animacion sin exportar
-- animacion transparente mas o menos
-- animacion visible uno por uno
-- animacion de destruccion por particulas al azar
-- animacion de cambio de color para un grupo o todo
-- animacion de respiracion idle para grupo
-- animacion de pies para grupos de pies
-- animacion de particulas para un grupo o todo
-- animacion particulas sifon, atrae o repele tipo PSO
-- animacion particulas torcion tornado
-- animacion de caida solo para un grupo o todo (ya)
-- animacion escala
-- animacion de rotacion
-- animacion de movimiento
-- animacion de color moviendose en grupo
-- animacion de rotacion solo de iluminacion
+- mejorar ingreso a modo animacion, agregar opcion solo sombras
+- hacer el ingreso de datos de animacion
+- terminar la funcion de animacion, 3 funciones internas y sus inicios
+- hacer el modo play de animacion, entrando en un loop donde:
+  se puede detener, cambiar ms de pasos, rotar la vista, poner ms reinicio
+- exportar la animacion aprovechando el rendereo de una vez por cara
+- poner el numero de colisiones al animar particulas, similar a manual
+- guardar y abrir animaciones del txt
 tool
 - 
 crear
